@@ -1,0 +1,26 @@
+name: IST_PMBA_Env
+channels:
+  - defaults
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - matplotlib
+  - pillow
+  - scikit-learn
+  - torchvision
+  - pydub
+  - librosa
+  - transformers
+  - notebook
+  - nb_conda_kernels
+  - sox                 # 🆕 System-level sox (used by torchaudio)
+  - pip
+  - pip:
+      - timm
+      - torchtext
+      - torch
+      - soundfile       # 🆕 For torchaudio 'soundfile' backend
+

@@ -1,34 +1,47 @@
 import os
 import pandas as pd
-from sklearn.model_selection import train_test_split
+import torchaudio
+torchaudio.set_audio_backend("sox_io")
 
-# Function to load all .wav files and their corresponding labels
-def load_data_from_folder(data_folder):
-    # Create paths for audio and labels
-    data_paths = {'train': {'audio': os.path.join(data_folder, 'train_data'),
-                            'labels': os.path.join(data_folder, 'train_labels')},
-                  'test': {'audio': os.path.join(data_folder, 'test_data'),
-                           'labels': os.path.join(data_folder, 'test_labels')}}
+import os
+import torchaudio
+import pandas as pd
 
-    # Initialize lists to hold the file paths and labels
-    file_paths = {'train': [], 'test': []}
-    labels = {'train': [], 'test': []}
+def load_wav_and_labels(train_audio_dir, test_audio_dir, train_label_dir, test_label_dir):
+    data = {'train': [], 'test': []}
+
+    # Define a helper function to load files from a given directory
+    def load_data(audio_dir, label_dir, split):
+        for filename in os.listdir(audio_dir):
+            if filename.endswith('.wav'):
+                wav_path = os.path.join(audio_dir, filename)
+                label_path = os.path.join(label_dir, filename.replace('.wav', '.csv'))
+
+                try:
+                    # Load the audio file using torchaudio
+                    audio, sr = torchaudio.load(wav_path)  # Much faster than librosa!
+
+                    # Load the label file if it exists
+                    label = pd.read_csv(label_path) if os.path.exists(label_path) else None
+
+                    # Append the loaded data to the appropriate split (train/test)
+                    data[split].append({
+                        'filename': filename,
+                        'audio': audio,
+                        'sr': sr,
+                        'label': label
+                    })
+
+                except Exception as e:
+                    print(f"Error loading {filename}: {e}")
 
     # Load training data
-    for filename in os.listdir(data_paths['train']['audio']):
-        if filename.endswith(".wav"):
-            file_paths['train'].append(os.path.join(data_paths['train']['audio'], filename))
-            label_filename = filename.replace('.wav', '.csv')
-            labels['train'].append(os.path.join(data_paths['train']['labels'], label_filename))
+    load_data(train_audio_dir, train_label_dir, 'train')
 
     # Load testing data
-    for filename in os.listdir(data_paths['test']['audio']):
-        if filename.endswith(".wav"):
-            file_paths['test'].append(os.path.join(data_paths['test']['audio'], filename))
-            label_filename = filename.replace('.wav', '.csv')
-            labels['test'].append(os.path.join(data_paths['test']['labels'], label_filename))
+    load_data(test_audio_dir, test_label_dir, 'test')
 
-    return file_paths, labels
+    return data
 
 def train_test_split_data(file_paths, labels, test_size=0.2):
     # Since we already have train/test sets, we don't need to split again here

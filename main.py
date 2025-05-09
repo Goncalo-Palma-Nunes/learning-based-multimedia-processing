@@ -7,6 +7,7 @@ from models.dataset                          import MelSpectrogramDataset
 from models.cnn                              import TranscriptionCNN
 from models.Checkpoint_print                 import print_header, print_small_header, print_update
 from models.spectrogram_mel                  import compute_mel_spectrogram
+from models.rnn                              import TranscriptionRNN
 import torch.optim                           as optim
 import torch.nn                              as nn
 from pydub                                   import AudioSegment
@@ -197,6 +198,40 @@ def evaluate_model(model, test_loader):
     print(f'Accuracy on test set: {100 * correct / total:.2f}%')
 
 
+#######################################################################################################################
+# Step 6: train BLSTM model
+def train_BLSTM(train_dataset, test_dataset):
+    print_header("Initialize the model")
+
+    train_dataset = MelSpectrogramDataset(train_dataset, n_notes=88)
+    test_dataset = MelSpectrogramDataset(test_dataset, n_notes=88)
+
+    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
+
+    model = TranscriptionRNN(n_notes=88)  # Adjust for the number of notes (88 for piano keys)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.BCELoss()  # Binary Cross-Entropy for multi-label classification
+
+    # Training Loop
+    num_epochs = 10
+    for epoch in range(num_epochs):
+        model
+        model.train()
+        running_loss = 0
+        for inputs, labels in train_loader:
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+        
+    
+    return train_loader, test_loader, model
+######################################################################################################################
+
+
 if __name__ == "__main__":
     # receive parameter from command line
     if len(sys.argv) > 1:
@@ -210,7 +245,10 @@ if __name__ == "__main__":
         
 
         param = sys.argv[1]
-        musicnet_path = sys.argv[2]
+        if len(sys.argv) == 3:
+            musicnet_path = sys.argv[2]
+        else:
+            musicnet_path = DEFAULT_MUSICNET_PATH
         print(f"Received parameters: {param, musicnet_path}")
 
         # Fetch data
@@ -222,7 +260,8 @@ if __name__ == "__main__":
             train_loader, test_loader, model = train_CNN(train_dataset, test_dataset)
             evaluate_model(model, test_loader)
         elif param == 'BLSTM':
-            print("BLSTM model training and evaluation not implemented yet.")
+            train_loader, test_loader, model = train_BLSTM(train_dataset, test_dataset)
+            evaluate_model(model, test_loader)
         elif param == 'CRNN':
             print("CRNN model training and evaluation not implemented yet.")
         else:

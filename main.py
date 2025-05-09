@@ -99,6 +99,8 @@ for audio_tensor in test_data_audio:
     except Exception as e:
         print(f"Error processing test sample: {e}")
 
+print_update("Plotting Spectrogram of the First 3 samples")
+
 for i, mel in enumerate(train_mels[:3]):  # Just plot first 3
     plt.figure(figsize=(10, 4))
     librosa.display.specshow(mel, sr=22050, x_axis='time', y_axis='mel', fmax=8000)

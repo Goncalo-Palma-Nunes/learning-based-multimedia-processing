@@ -16,8 +16,7 @@ import librosa
 import matplotlib.pyplot                     as plt
 import sys
 
-DEFAULT_MUSICNET_PATH = '/Users/denis/Desktop/IST/S2_24_25/PMBA/musicnet'  # Default path to MusicNet data
-
+DEFAULT_MUSICNET_PATH = '/Users/denis/Library/CloudStorage/GoogleDrive-drfafelgueiras@gmail.com/My Drive/IST/musicnet' # Default path to MusicNet data
 
 ######################################################################################################################
 #Step 0: fetching the data for training and testing
@@ -27,8 +26,7 @@ def fetch_data(musicnet_path=DEFAULT_MUSICNET_PATH):
     print_header("Finding Folder of Musicnet")
 
     # Path to the music_net data folder
-    raw_data_file = os.path.join(musicnet_path, 'musicnet')
-    #raw_data_file = '/Users/denis/Desktop/IST/S2_24_25/PMBA/musicnet' # está a dar problemas
+    raw_data_file = DEFAULT_MUSICNET_PATH
 
     if os.path.exists(raw_data_file):
         print(f"Path found: {raw_data_file}")

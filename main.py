@@ -26,7 +26,7 @@ def fetch_data(musicnet_path=DEFAULT_MUSICNET_PATH):
     print_header("Finding Folder of Musicnet")
 
     # Path to the music_net data folder
-    raw_data_file = DEFAULT_MUSICNET_PATH
+    raw_data_file = musicnet_path
 
     if os.path.exists(raw_data_file):
         print(f"Path found: {raw_data_file}")
@@ -165,7 +165,7 @@ def train_CNN(train_dataset, test_dataset):
         model.train()
         running_loss = 0
         for inputs, labels in train_loader:
-            optimizer.zero_grad()
+            optimizer.zero_grad() 
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()

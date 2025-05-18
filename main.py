@@ -201,13 +201,14 @@ def evaluate_model(model, test_loader):
 def train_BLSTM(train_dataset, test_dataset):
     print_header("Initialize the model")
 
-    train_dataset = MelSpectrogramDataset(train_dataset, n_notes=88)
-    test_dataset = MelSpectrogramDataset(test_dataset, n_notes=88)
+    #train_dataset = MelSpectrogramDataset(train_dataset, n_notes=88)
+    #test_dataset = MelSpectrogramDataset(test_dataset, n_notes=88)
 
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
 
-    model = TranscriptionRNN(n_notes=88)  # Adjust for the number of notes (88 for piano keys)
+    cuda_model = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check for GPU
+    model = TranscriptionRNN(n_notes=88).to(cuda_model)  # Adjust for the number of notes (88 for piano keys)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     criterion = nn.BCELoss()  # Binary Cross-Entropy for multi-label classification
 
@@ -224,7 +225,6 @@ def train_BLSTM(train_dataset, test_dataset):
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
-        
     
     return train_loader, test_loader, model
 ######################################################################################################################

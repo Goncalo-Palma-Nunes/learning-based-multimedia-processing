@@ -1,2 +1,6 @@
 # learning-based-multimedia-processing
-learning based multimedia processing 2024/2025
+comparing different models for automatic music transcription. 
+
+- CNN - analysis of spectrograms associated with the different audio files
+- RNN - analysis of the audio files
+- CRNN - hybrid neural network of recurrent neural network after convolutional neural network

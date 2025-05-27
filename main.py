@@ -17,7 +17,14 @@ import librosa
 import matplotlib.pyplot                     as plt
 import sys
 
-DEFAULT_MUSICNET_PATH = '/Users/denis/Library/CloudStorage/GoogleDrive-drfafelgueiras@gmail.com/My Drive/IST/musicnet' # Default path to MusicNet data
+DEFAULT_MUSICNET_PATH = '"G:\My Drive\musicnet.lnk"' # Default path to MusicNet data
+# DEFAULT_MUSICNET_PATH = 'G:.shortcut-targets-by-id\1be0ZtqPerroj_26UIPR44o2QHfWTTykG\musicnet'
+
+def using_cuda():
+    if torch.cuda.is_available():
+        print("Using GPU for training")
+    else:
+        print("Using CPU for training")
 
 ######################################################################################################################
 #Step 0: fetching the data for training and testing
@@ -156,7 +163,9 @@ def train_CNN(train_dataset, test_dataset):
     test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
 
 
-    model = TranscriptionCNN(n_notes=88)  # Adjust for the number of notes (88 for piano keys)
+    cuda_model = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check for GPU
+    using_cuda()
+    model = TranscriptionCNN(n_notes=88).to(cuda_model)  # Adjust for the number of notes (88 for piano keys)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     criterion = nn.BCELoss()  # Binary Cross-Entropy for multi-label classification
 
@@ -209,6 +218,7 @@ def train_BLSTM(train_dataset, test_dataset):
     test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
 
     cuda_model = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check for GPU
+    using_cuda()
     model = TranscriptionRNN(n_notes=88).to(cuda_model)  # Adjust for the number of notes (88 for piano keys)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     criterion = nn.BCELoss()  # Binary Cross-Entropy for multi-label classification
@@ -304,7 +314,7 @@ if __name__ == "__main__":
         if len(sys.argv) > 3:
             print("Too many parameters. Please specify only one of the following as a first parameter:")
             print("1. 'CNN' for a convolutional neural network")
-            print("2. 'BLSTM' for a bidirectional long short-term memory network")
+            print("2. 'RNN' for a bidirectional long short-term memory network")
             print("3. 'CRNN' for a convolutional recurrent neural network")
             print("The second parameter should be the path to musicnet data folder (can be omitted)")
             sys.exit(1)
@@ -325,7 +335,7 @@ if __name__ == "__main__":
         if param == 'CNN':
             train_loader, test_loader, model = train_CNN(train_dataset, test_dataset)
             evaluate_model(model, test_loader)
-        elif param == 'BLSTM':
+        elif param == 'RNN':
             train_loader, test_loader, model = train_BLSTM(train_dataset, test_dataset)
             evaluate_model(model, test_loader)
         elif param == 'CRNN':
@@ -334,14 +344,14 @@ if __name__ == "__main__":
         else:
             print("Invalid parameter. Please specify one of the following as a first parameter:")
             print("1. 'CNN' for a convolutional neural network")
-            print("2. 'BLSTM' for a bidirectional long short-term memory network")
+            print("2. 'RNN' for a bidirectional long short-term memory network")
             print("3. 'CRNN' for a convolutional recurrent neural network")
             print("The second parameter should be the path to musicnet data folder (can be omitted)")
             sys.exit(1)
     else:
         print("No parameters received. Please specify one of the following as a first parameter:")
         print("1. 'CNN' for a convolutional neural network")
-        print("2. 'BLSTM' for a bidirectional long short-term memory network")
+        print("2. 'RNN' for a bidirectional long short-term memory network")
         print("3. 'CRNN' for a convolutional recurrent neural network")
         print("The second parameter should be the path to musicnet data folder (can be omitted)")
         sys.exit(1)

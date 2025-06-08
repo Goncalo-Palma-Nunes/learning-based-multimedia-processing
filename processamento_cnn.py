@@ -554,11 +554,6 @@ train_dataset, test_dataset = prepare_data_and_compute_spectogram(train_data_aud
 
 train_loader, test_loader, model, device = train_CNN(train_dataset, test_dataset)
 
-"""# Call and train RNN"""
-
-train_dataset, test_dataset = prepare_audio_data_without_spectrogram(train_data_audio, train_data_labels, test_data_audio, test_data_labels)
-train_loader, test_loader, model = train_BLSTM(train_dataset, test_dataset)
-
 """# Evaluate Model"""
 
 evaluate_model(model, test_loader, device)

@@ -477,7 +477,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-def train_CRNN(train_dataset, test_dataset, n_notes=88, num_epochs=30, batch_size=8):
+def train_CRNN(train_dataset, test_dataset, n_notes=88, num_epochs=200, batch_size=8):
     """Train a CRNN model using BCEWithLogitsLoss on Mel spectrogram data."""
 
     print_header("Initializing CRNN model for multi-label classification")
@@ -567,16 +567,6 @@ musicnet_path = fetch_data(path_goncas)
 train_data_audio, train_data_labels, test_data_audio, test_data_labels = load_split(musicnet_path)
 
 print_header("Finished Loading")
-
-"""# Call and train CNN"""
-
-train_dataset, test_dataset = prepare_data_and_compute_spectogram(train_data_audio, train_data_labels, test_data_audio, test_data_labels)
-train_loader, test_loader, model, device = train_CNN(train_dataset, test_dataset)
-
-"""# Call and train RNN"""
-
-train_dataset, test_dataset = prepare_audio_data_without_spectrogram(train_data_audio, train_data_labels, test_data_audio, test_data_labels)
-train_loader, test_loader, model = train_BLSTM(train_dataset, test_dataset)
 
 """# Call and train CRNN"""
 

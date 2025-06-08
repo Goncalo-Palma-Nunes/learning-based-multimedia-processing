@@ -358,7 +358,7 @@ def train_BLSTM(train_dataset, test_dataset):
     criterion = nn.BCELoss()  # Binary Cross-Entropy for multi-label classification
 
     # Training Loop
-    num_epochs = 20
+    num_epochs = 200
     for epoch in range(num_epochs):
         model
         model.train()

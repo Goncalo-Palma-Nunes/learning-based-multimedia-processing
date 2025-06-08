@@ -17,7 +17,7 @@ import librosa
 import matplotlib.pyplot                     as plt
 import sys
 
-DEFAULT_MUSICNET_PATH = '"G:\My Drive\musicnet.lnk"' # Default path to MusicNet data
+DEFAULT_MUSICNET_PATH = "/mnt/e/musicnet2/" # Default path to MusicNet data
 # DEFAULT_MUSICNET_PATH = 'G:.shortcut-targets-by-id\1be0ZtqPerroj_26UIPR44o2QHfWTTykG\musicnet'
 
 def using_cuda():
@@ -146,6 +146,16 @@ def prepare_data_and_compute_spectogram(train_data_audio, train_data_labels, tes
     # Create a new dataset combining mel spectrograms with labels
     train_dataset = [{'mel': mel, 'label': label} for mel, label in zip(train_mels, train_data_labels)]
     test_dataset  = [{'mel': mel, 'label': label} for mel, label in zip(test_mels, test_data_labels)]
+
+    return train_dataset, test_dataset
+
+
+def prepare_audio_data_without_spectrogram(train_data_audio, train_data_labels, test_data_audio, test_data_labels):
+    print_header("Preparing audio data without spectrogram")
+
+    # Create a new dataset combining audio with labels
+    train_dataset = [{'audio': audio, 'label': label} for audio, label in zip(train_data_audio, train_data_labels)]
+    test_dataset  = [{'audio': audio, 'label': label} for audio, label in zip(test_data_audio, test_data_labels)]
 
     return train_dataset, test_dataset
 
@@ -330,17 +340,20 @@ if __name__ == "__main__":
         # Fetch data
         musicnet_path = fetch_data(musicnet_path)
         train_data_audio, train_data_labels, test_data_audio, test_data_labels = load_split(musicnet_path)
-        train_dataset, test_dataset = prepare_data_and_compute_spectogram(train_data_audio, train_data_labels, test_data_audio, test_data_labels)
+
 
         if param == 'CNN':
+            train_dataset, test_dataset = prepare_data_and_compute_spectogram(train_data_audio, train_data_labels, test_data_audio, test_data_labels)
             train_loader, test_loader, model = train_CNN(train_dataset, test_dataset)
             evaluate_model(model, test_loader)
         elif param == 'RNN':
+            train_dataset, test_dataset = prepare_audio_data_without_spectrogram(train_data_audio, train_data_labels, test_data_audio, test_data_labels)
             train_loader, test_loader, model = train_BLSTM(train_dataset, test_dataset)
             evaluate_model(model, test_loader)
         elif param == 'CRNN':
-            train_loader, test_loader, model = train_CRNN_CTC(train_dataset, test_dataset)
-            evaluate_model(model, test_loader)
+            #train_loader, test_loader, model = train_CRNN_CTC(train_dataset, test_dataset)
+            #evaluate_model(model, test_loader)
+            pass
         else:
             print("Invalid parameter. Please specify one of the following as a first parameter:")
             print("1. 'CNN' for a convolutional neural network")

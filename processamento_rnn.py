@@ -32,8 +32,8 @@ import librosa.display
 
 """# Data Set Path"""
 
-path = "/extra/pbma/musicnet"
-path_goncas = "/extra/pbma/musicnet"
+path = "/extra/pbma/musicnet/musicnet/musicnet/"
+path_goncas = "/extra/pbma/musicnet/musicnet/musicnet/"
 
 """# Output functions"""
 
@@ -194,7 +194,7 @@ def train_test_split_data(file_paths, labels, test_size=0.2):
 
 """# Fetch Data"""
 
-def fetch_data(musicnet_path="/extra/pbma/musicnet"):
+def fetch_data(musicnet_path="/extra/pbma/musicnet/musicnet/musicnet/"):
 
     print_header("Finding Folder of Musicnet")
 
@@ -216,7 +216,7 @@ def fetch_data(musicnet_path="/extra/pbma/musicnet"):
 
 """# Load Split"""
 
-def load_split(data, musicnet_path="/extra/pbma/musicnet"):
+def load_split(data, musicnet_path="/extra/pbma/musicnet/musicnet/musicnet/"):
 
     print_header("Loading all the data")
 
@@ -403,7 +403,7 @@ def evaluate_model(model, test_loader, device):
 """
 
 #path1 = "/content/drive/My Drive/IST/musicnet"
-path_goncalo = "/extra/pbma/musicnet"
+path_goncalo = "/extra/pbma/musicnet/musicnet/musicnet/"
 
 if os.path.exists(path_goncalo):
   print("fixe")

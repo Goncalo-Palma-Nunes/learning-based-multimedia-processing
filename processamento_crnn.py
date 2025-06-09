@@ -13,6 +13,7 @@ Original file is located at
 import os
 import pandas as pd
 from rich import print
+from sklearn.metrics import precision_score, recall_score, f1_score
 import torchaudio
 torchaudio.set_audio_backend("sox_io")
 import torch
@@ -546,20 +547,38 @@ def evaluate_model(model, test_loader, device):
     running_correct = 0
     running_total = 0
 
+    all_labels = []
+    all_preds = []
+
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs = inputs.to(device)
-            labels = labels.to(device).float()  # Ensure float
+            labels = labels.to(device).float()
 
             outputs = model(inputs)  # Raw logits
             probs = torch.sigmoid(outputs)  # Convert to probabilities
             predicted = (probs > 0.5).float()  # Threshold at 0.5
 
             running_correct += (predicted == labels).sum().item()
-            running_total += torch.numel(labels)  # Total number of labels (batch_size * n_notes)
+            running_total += torch.numel(labels)
+
+            all_labels.append(labels.cpu())
+            all_preds.append(predicted.cpu())
 
     accuracy = 100 * running_correct / running_total
-    print(f'Accuracy on test set: {accuracy:.2f}%')
+    print(f'Binary Accuracy (label-wise): {accuracy:.2f}%')
+
+    # Convert to numpy for sklearn metrics
+    all_labels = torch.cat(all_labels).numpy()
+    all_preds = torch.cat(all_preds).numpy()
+
+    # Average='macro' gives equal weight to each class (note)
+    precision = precision_score(all_labels, all_preds, average='macro', zero_division=0)
+    recall = recall_score(all_labels, all_preds, average='macro', zero_division=0)
+    f1 = f1_score(all_labels, all_preds, average='macro', zero_division=0)
+
+    print(f'Precision: {precision:.4f}, Recall: {recall:.4f}, F1-score: {f1:.4f}')
+
 
 """# "Main Function"
 """

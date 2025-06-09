@@ -458,7 +458,7 @@ def train_BLSTM(train_dataset, test_dataset):
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     criterion = nn.BCEWithLogitsLoss() 
     
-    num_epochs = 10
+    num_epochs = 200
     for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0

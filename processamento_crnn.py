@@ -242,7 +242,7 @@ class TranscriptionCRNN(nn.Module):
 
 """# Data Loader"""
 
-def load_wav_and_labels(train_audio_dir, test_audio_dir, train_label_dir, test_label_dir, load_fraction=1):
+def load_wav_and_labels(train_audio_dir, test_audio_dir, train_label_dir, test_label_dir, load_fraction=0.5):
     data = {'train': [], 'test': []}
 
     def load_data(audio_dir, label_dir, split):

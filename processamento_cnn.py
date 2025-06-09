@@ -242,7 +242,7 @@ class TranscriptionCRNN(nn.Module):
 
 """# Data Loader"""
 
-def load_wav_and_labels(train_audio_dir, test_audio_dir, train_label_dir, test_label_dir, load_fraction=1):
+def load_wav_and_labels(train_audio_dir, test_audio_dir, train_label_dir, test_label_dir, load_fraction=0.5):
     data = {'train': [], 'test': []}
 
     def load_data(audio_dir, label_dir, split):
@@ -477,7 +477,7 @@ def train_BLSTM(train_dataset, test_dataset):
         avg_loss = running_loss / len(train_loader)
         print(f"Epoch {epoch+1}/{num_epochs}, Loss: {avg_loss:.4f}")
 
-    return train_loader, test_loader, model
+    return train_loader, test_loader, model, device
 
 
 """# CRNN Training"""

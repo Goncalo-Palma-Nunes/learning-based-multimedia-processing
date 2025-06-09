@@ -14,6 +14,7 @@ Original file is located at
 import os
 import pandas as pd
 from rich import print
+from sklearn.metrics import precision_score, recall_score, f1_score
 import torchaudio
 torchaudio.set_audio_backend("sox_io")
 import torch
@@ -21,7 +22,6 @@ import torch.nn as nn
 from torch.utils.data                        import DataLoader
 from torch.utils.data import Dataset
 import torch.optim                           as optim
-from torch.nn.utils.rnn import pad_sequence
 from pydub                                   import AudioSegment
 import numpy                                 as np
 import librosa
@@ -33,6 +33,7 @@ import librosa.display
 """# Data Set Path"""
 
 path = "/extra/pbma/musicnet/musicnet/musicnet/"
+
 path_goncas = "/extra/pbma/musicnet/musicnet/musicnet/"
 
 """# Output functions"""
@@ -73,32 +74,6 @@ def print_separator(symbol: str = DEFAULT_SYMBOL, width: int = DEFAULT_WIDTH):
 def print_update(s: str):
     print(f"{s}")
 
-"""# Custom DataSet Class"""
-
-class AudioDataset(Dataset):
-    def __init__(self, data, target_length=16000):  # ~1 second at 16kHz
-        self.data = data
-        self.target_length = target_length
-
-    def __getitem__(self, idx):
-        item = self.data[idx]
-        waveform = torch.tensor(item['audio'], dtype=torch.float32).squeeze()
-
-        # Pad or truncate
-        length = waveform.shape[0]
-        if length < self.target_length:
-            pad_len = self.target_length - length
-            waveform = torch.nn.functional.pad(waveform, (0, pad_len))
-        else:
-            waveform = waveform[:self.target_length]
-
-        label_vector = torch.zeros(88, dtype=torch.float32)
-        for note in item['label']:
-            if 0 <= note < 88:
-                label_vector[note] = 1.0
-
-        return waveform, label_vector
-
 """# Mel Spectogram"""
 
 def compute_mel_spectrogram(tensor_audio, sr=22050, n_mels=128, fmax=8000):
@@ -120,14 +95,16 @@ class MelSpectrogramDataset(Dataset):
         mel = self.data[idx]['mel']
         label_df = self.data[idx]['label']
 
-        mel_tensor = torch.tensor(mel, dtype=torch.float32).T  # [T, 128]
+        mel_tensor = torch.tensor(mel, dtype=torch.float32)
 
-        # Pad or truncate in time dimension
-        if mel_tensor.shape[0] > self.max_len:
-            mel_tensor = mel_tensor[:self.max_len, :]
+        # Pad or truncate
+        if mel_tensor.shape[1] > self.max_len:
+            mel_tensor = mel_tensor[:, :self.max_len]
         else:
-            pad_len = self.max_len - mel_tensor.shape[0]
-            mel_tensor = torch.nn.functional.pad(mel_tensor, (0, 0, 0, pad_len))  # pad time dimension
+            pad_width = self.max_len - mel_tensor.shape[1]
+            mel_tensor = torch.nn.functional.pad(mel_tensor, (0, pad_width))
+
+        mel_tensor = mel_tensor.unsqueeze(0)  # Add channel dim: [1, 128, T]
 
         # Create multi-hot label vector
         label_vector = torch.zeros(self.n_notes)
@@ -146,10 +123,10 @@ class TranscriptionRNN(nn.Module):
         # Bidirectional LSTM with 2 layers
         # self.rnn_dropout = nn.Dropout(0.5)
         self.fc = nn.Sequential(
-            nn.Linear(512, 512),  # <- corrected
+            nn.Linear(256, 512),
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(512, n_notes)
+            nn.Linear(512, n_notes)  # Final layer for multi-label classification
         )
 
     def forward(self, x):
@@ -159,6 +136,112 @@ class TranscriptionRNN(nn.Module):
         x = self.fc(x)  # Fully connected layers
         x = torch.sigmoid(x)  # Apply sigmoid activation to ensure output in [0, 1]
         return x
+
+"""# CNN"""
+
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, downsample=False):
+        super(ResidualBlock, self).__init__()
+        stride = 2 if downsample else 1
+
+        self.conv_block = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(out_channels)
+        )
+
+        self.skip_connection = nn.Sequential()
+        if downsample or in_channels != out_channels:
+            self.skip_connection = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride),
+                nn.BatchNorm2d(out_channels)
+            )
+
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        residual = self.skip_connection(x)
+        x = self.conv_block(x)
+        x += residual
+        return self.relu(x)
+
+class TranscriptionCNN(nn.Module):
+    def __init__(self, n_notes):
+        super(TranscriptionCNN, self).__init__()
+
+        self.initial = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU()
+        )
+
+        self.layer1 = ResidualBlock(32, 64, downsample=True)
+        self.layer2 = ResidualBlock(64, 128, downsample=True)
+        self.layer3 = ResidualBlock(128, 256, downsample=True)
+        self.layer4 = ResidualBlock(256, 512, downsample=True)
+
+        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Output: (B, 512, 1, 1)
+
+        self.fc = nn.Sequential(
+            nn.Flatten(),            # Shape: (B, 512)
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(256, n_notes),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        x = self.initial(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.global_pool(x)
+        x = self.fc(x)
+        return x
+
+"""# CRNN"""
+
+from re import X
+import torch.nn as nn
+import torch
+
+class TranscriptionCRNN(nn.Module):
+    def __init__(self, n_notes):
+        super(TranscriptionCRNN, self).__init__()
+
+        self.initial = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU()
+        )
+
+        self.layer1 = ResidualBlock(32, 64, downsample=True)
+        self.layer2 = ResidualBlock(64, 128, downsample=True)
+        self.layer3 = ResidualBlock(128, 256, downsample=True)
+        self.layer4 = ResidualBlock(256, 512, downsample=True)
+
+        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Output: (B, 512, 1, 1)
+
+        self.fc = nn.Sequential(
+            nn.Flatten(),            # Shape: (B, 512)
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(256, n_notes),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # x: (batch_size, 1, height, width)
+        x = self.cnn(x)           # -> (batch_size, 256, 1, 1)
+        x = self.fc(x)            # -> (batch_size, n_notes)
+        return x
+
+"""# Data Loader"""
 
 def load_wav_and_labels(train_audio_dir, test_audio_dir, train_label_dir, test_label_dir, load_fraction=1):
     data = {'train': [], 'test': []}
@@ -321,101 +404,198 @@ def prepare_audio_data_without_spectrogram(train_data_audio, train_data_labels, 
 
     return train_dataset, test_dataset
 
-"""# RNN Training"""
+"""# CNN training"""
 
-def collate_fn(batch):
-    audios, labels = zip(*batch)
-
-    # Convert to 1D float tensors and squeeze if necessary
-    audios = [a.float().squeeze() for a in audios]
-    labels = [l.float() for l in labels]
-
-    # Pad to max length in the batch
-    audios_padded = pad_sequence(audios, batch_first=True)  # (B, max_len)
-    audios_padded = audios_padded.unsqueeze(1)  # (B, 1, max_len) for CNNs/RNNs expecting 3D input
-
-    labels = torch.stack(labels)
-
-    return audios_padded, labels
-
-def train_BLSTM(train_dataset, test_dataset):
+def train_CNN(train_dataset, test_dataset):
     print_header("Initialize the model")
 
     train_dataset = MelSpectrogramDataset(train_dataset, n_notes=88)
     test_dataset = MelSpectrogramDataset(test_dataset, n_notes=88)
 
-    #train_dataset = AudioDataset(train_dataset_raw)
-    #test_dataset = AudioDataset(test_dataset_raw)
-
-
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
 
-    cuda_model = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check for GPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     using_cuda()
-    model = TranscriptionRNN(n_notes=88).to(cuda_model)  # Adjust for the number of notes (88 for piano keys)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.BCELoss()  # Binary Cross-Entropy for multi-label classification
 
-    # Training Loop
-    num_epochs = 200
+    model = TranscriptionCNN(n_notes=88).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.BCEWithLogitsLoss()
+
+    num_epochs = 10
     for epoch in range(num_epochs):
-        model
         model.train()
-        running_loss = 0
+        running_loss = 0.0
+
         for inputs, labels in train_loader:
-            inputs = inputs.to(cuda_model)  # Ensure float
-            labels = labels.to(cuda_model)
+            inputs = inputs.to(device)
+            labels = labels.to(device).float()
 
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+
             running_loss += loss.item()
 
-        print(f"Epoch {epoch+1}/{num_epochs}, Loss: {running_loss/len(train_loader):.4f}")
+        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {running_loss / len(train_loader):.4f}")
 
-    return train_loader, test_loader, model, cuda_model
+    return train_loader, test_loader, model
+
+"""# RNN Training"""
+
+def train_BLSTM(train_dataset, test_dataset):
+    print_header("Initialize the model")
+
+    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    using_cuda()
+
+    model = TranscriptionRNN(n_notes=88).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.BCEWithLogitsLoss() 
+    
+    num_epochs = 10
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss = 0.0
+
+        for inputs, labels in train_loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device).float()
+
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+        avg_loss = running_loss / len(train_loader)
+        print(f"Epoch {epoch+1}/{num_epochs}, Loss: {avg_loss:.4f}")
+
+    return train_loader, test_loader, model
+
+
+"""# CRNN Training"""
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+
+def train_CRNN(train_dataset, test_dataset, n_notes=88, num_epochs=200, batch_size=8):
+    """Train a CRNN model using BCEWithLogitsLoss on Mel spectrogram data."""
+
+    print_header("Initializing CRNN model for multi-label classification")
+
+    # === Dataset Setup ===
+    train_dataset = MelSpectrogramDataset(train_dataset, n_notes=n_notes)
+    test_dataset = MelSpectrogramDataset(test_dataset, n_notes=n_notes)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    # === Device & Model Setup ===
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = TranscriptionCRNN(n_notes=n_notes).to(device)
+
+    # === Optimization ===
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)  # Often more stable
+
+    # === Training Loop ===
+    for epoch in range(1, num_epochs + 1):
+        model.train()
+        running_loss = 0.0
+        running_correct = 0
+        running_total = 0
+
+        for inputs, targets in train_loader:
+            inputs = inputs.to(device)
+            targets = targets.to(device).float()  # Ensure float for BCE
+
+            optimizer.zero_grad()
+            outputs = model(inputs)  # shape: (batch, n_notes)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+
+            # === Multi-label Accuracy ===
+            preds = torch.sigmoid(outputs) > 0.5
+            correct = (preds == targets.bool()).sum().item()
+            total = torch.numel(preds)
+            running_correct += correct
+            running_total += total
+
+        avg_loss = running_loss / len(train_loader)
+        accuracy = running_correct / running_total * 100
+        print(f"Epoch {epoch:02d}/{num_epochs} | Loss: {avg_loss:.4f} | Train Acc: {accuracy:.2f}%")
+
+    return train_loader, test_loader, model, device
 
 """# Model Evaluation"""
 
 def evaluate_model(model, test_loader, device):
-
     print_header("Evaluate the model")
 
     model.eval()
-    correct = 0
-    total = 0
+    running_correct = 0
+    running_total = 0
+
+    all_labels = []
+    all_preds = []
+
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs = inputs.to(device)
-            labels = labels.to(device)
+            labels = labels.to(device).float()
 
-            outputs = model(inputs)
-            predicted = outputs.round()  # Since this is multi-label, round to 0/1
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            outputs = model(inputs)  # Raw logits
+            probs = torch.sigmoid(outputs)  # Convert to probabilities
+            predicted = (probs > 0.5).float()  # Threshold at 0.5
 
-    print(f'Accuracy on test set: {correct / total:.2f}%')
+            running_correct += (predicted == labels).sum().item()
+            running_total += torch.numel(labels)
+
+            all_labels.append(labels.cpu())
+            all_preds.append(predicted.cpu())
+
+    accuracy = 100 * running_correct / running_total
+    print(f'Binary Accuracy (label-wise): {accuracy:.2f}%')
+
+    # Convert to numpy for sklearn metrics
+    all_labels = torch.cat(all_labels).numpy()
+    all_preds = torch.cat(all_preds).numpy()
+
+    # Average='macro' gives equal weight to each class (note)
+    precision = precision_score(all_labels, all_preds, average='macro', zero_division=0)
+    recall = recall_score(all_labels, all_preds, average='macro', zero_division=0)
+    f1 = f1_score(all_labels, all_preds, average='macro', zero_division=0)
+
+    print(f'Precision: {precision:.4f}, Recall: {recall:.4f}, F1-score: {f1:.4f}')
+
 
 """# "Main Function"
 """
 
 #path1 = "/content/drive/My Drive/IST/musicnet"
-path_goncalo = "/extra/pbma/musicnet/musicnet/musicnet/"
+path_goncas = "/extra/pbma/musicnet/musicnet/musicnet/"
 
-if os.path.exists(path_goncalo):
+if os.path.exists(path_goncas):
   print("fixe")
 else:
   print(":(")
 
-musicnet_path = fetch_data(path_goncalo)
+musicnet_path = fetch_data(path_goncas)
 train_data_audio, train_data_labels, test_data_audio, test_data_labels = load_split(musicnet_path)
 
 print_header("Finished Loading")
-
-"""# Call and train CNN"""
 
 train_dataset, test_dataset = prepare_data_and_compute_spectogram(train_data_audio, train_data_labels, test_data_audio, test_data_labels)
 

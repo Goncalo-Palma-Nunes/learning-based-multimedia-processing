@@ -211,21 +211,26 @@ class TranscriptionCRNN(nn.Module):
     def __init__(self, n_notes):
         super(TranscriptionCRNN, self).__init__()
 
-        # Convolutional layers
-        self.cnn = nn.Sequential(
-        nn.Conv2d(1, 64, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-        nn.Conv2d(64, 128, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-        nn.Conv2d(128, 256, 3, padding=1), nn.ReLU(),
-        nn.AdaptiveAvgPool2d((1, 1))  # Output size: (batch, 256, 1, 1)
+        self.initial = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU()
         )
 
-        # Fully connected classifier
+        self.layer1 = ResidualBlock(32, 64, downsample=True)
+        self.layer2 = ResidualBlock(64, 128, downsample=True)
+        self.layer3 = ResidualBlock(128, 256, downsample=True)
+        self.layer4 = ResidualBlock(256, 512, downsample=True)
+
+        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Output: (B, 512, 1, 1)
+
         self.fc = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(256, 128),
+            nn.Flatten(),            # Shape: (B, 512)
+            nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, n_notes)  # Output shape: (batch_size, n_notes)
+            nn.Dropout(0.5),
+            nn.Linear(256, n_notes),
+            nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -400,7 +405,6 @@ def prepare_audio_data_without_spectrogram(train_data_audio, train_data_labels, 
 """# CNN training"""
 
 def train_CNN(train_dataset, test_dataset):
-
     print_header("Initialize the model")
 
     train_dataset = MelSpectrogramDataset(train_dataset, n_notes=88)
@@ -409,31 +413,31 @@ def train_CNN(train_dataset, test_dataset):
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
 
-
-    cuda_model = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check for GPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     using_cuda()
-    model = TranscriptionCNN(n_notes=88).to(cuda_model)  # Adjust for the number of notes (88 for piano keys)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.BCELoss()  # Binary Cross-Entropy for multi-label classification
 
-    # Training Loop
+    model = TranscriptionCNN(n_notes=88).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.BCEWithLogitsLoss()
+
     num_epochs = 10
     for epoch in range(num_epochs):
         model.train()
-        running_loss = 0
+        running_loss = 0.0
+
         for inputs, labels in train_loader:
-            # Move inputs to GPU
-            inputs = inputs.to(cuda_model)
-            labels = labels.to(cuda_model)
+            inputs = inputs.to(device)
+            labels = labels.to(device).float()
 
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+
             running_loss += loss.item()
 
-        print(f"Epoch {epoch+1}/{num_epochs}, Loss: {running_loss/len(train_loader):.4f}")
+        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {running_loss / len(train_loader):.4f}")
 
     return train_loader, test_loader, model
 
@@ -442,33 +446,38 @@ def train_CNN(train_dataset, test_dataset):
 def train_BLSTM(train_dataset, test_dataset):
     print_header("Initialize the model")
 
-    #train_dataset = MelSpectrogramDataset(train_dataset, n_notes=88)
-    #test_dataset = MelSpectrogramDataset(test_dataset, n_notes=88)
-
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
 
-    cuda_model = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check for GPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     using_cuda()
-    model = TranscriptionRNN(n_notes=88).to(cuda_model)  # Adjust for the number of notes (88 for piano keys)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.BCELoss()  # Binary Cross-Entropy for multi-label classification
 
-    # Training Loop
+    model = TranscriptionRNN(n_notes=88).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.BCEWithLogitsLoss() 
+    
     num_epochs = 10
     for epoch in range(num_epochs):
-        model
         model.train()
-        running_loss = 0
+        running_loss = 0.0
+
         for inputs, labels in train_loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device).float()
+
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+
             running_loss += loss.item()
 
+        avg_loss = running_loss / len(train_loader)
+        print(f"Epoch {epoch+1}/{num_epochs}, Loss: {avg_loss:.4f}")
+
     return train_loader, test_loader, model
+
 
 """# CRNN Training"""
 

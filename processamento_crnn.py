@@ -209,7 +209,7 @@ import torch.nn as nn
 import torch
 
 class TranscriptionCRNN(nn.Module):
-    def _init_(self, n_notes):
+    def __init__(self, n_notes):
         super(TranscriptionCRNN, self)._init_()
 
         self.cnn = nn.Sequential(

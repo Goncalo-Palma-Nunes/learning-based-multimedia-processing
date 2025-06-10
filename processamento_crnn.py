@@ -245,21 +245,22 @@ class TranscriptionCRNN(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)  # -> (B, C=512, H', T')
-
-        # Reshape for RNN: merge freq, keep time
-        B, C, H, T = x.shape
-        x = x.view(B, C * H, T)  # (B, features, time)
-        x = x.permute(0, 2, 1)   # (B, time, features)
-
+        x = self.layer4(x)  # (B, 512, H', T')
+    
+        # Reduce frequency dimension H' to 1 (global average pooling over freq)
+        x = x.mean(dim=2)  # (B, 512, T)
+    
+        # Prepare for RNN: (B, T, 512)
+        x = x.permute(0, 2, 1)  # (B, T, 512)
+    
         # Pass through RNN
-        x, _ = self.rnn(x)  # -> (B, time, 512)
-
+        x, _ = self.rnn(x)  # (B, T, 512)
+    
         # Aggregate time (mean or last step)
-        x = x.mean(dim=1)  # or use x[:, -1, :] for last hidden state
-
+        x = x.mean(dim=1)  # (B, 512)
+    
         # Final classification
-        x = self.fc(x)  # -> (B, n_notes)
+        x = self.fc(x)  # (B, n_notes)
         return x
 
 """# Data Loader"""

@@ -209,8 +209,8 @@ import torch.nn as nn
 import torch
 
 class TranscriptionCRNN(nn.Module):
-    def __init__(self, n_notes):
-        super(TranscriptionCRNN, self).__init__()
+    def _init_(self, n_notes):
+        super(TranscriptionCRNN, self)._init_()
 
         self.cnn = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1),
@@ -223,10 +223,15 @@ class TranscriptionCRNN(nn.Module):
         self.layer3 = ResidualBlock(128, 256, downsample=True)
         self.layer4 = ResidualBlock(256, 512, downsample=True)
 
-        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Output: (B, 512, 1, 1)
+        self.rnn = nn.LSTM(
+            input_size=512,  # each time step has 512 features (from conv features)
+            hidden_size=256,
+            num_layers=2,
+            batch_first=True,
+            bidirectional=True
+        )
 
         self.fc = nn.Sequential(
-            nn.Flatten(),            # Shape: (B, 512)
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Dropout(0.5),
@@ -235,16 +240,26 @@ class TranscriptionCRNN(nn.Module):
         )
 
     def forward(self, x):
-        # x: (batch_size, 1, height, width)
-        x = self.cnn(x)           # -> (batch_size, 256, 1, 1)
-        x = self.layer1(x)       # -> (batch_size, 64, height/2, width/2)
-        x = self.layer2(x)       # -> (batch_size, 128, height/4, width/4)
-        x = self.layer3(x)       # -> (batch_size, 256, height/8, width/8)
-        x = self.layer4(x)       # -> (batch_size, 512, height/16, width/16)
-        x = self.global_pool(x)
-        #x = x.squeeze(-1).squeeze(-1)
-        # x: (batch_size, 512)
-        x = self.fc(x)            # -> (batch_size, n_notes)
+        # x: (B, 1, H, T)
+        x = self.cnn(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)  # -> (B, C=512, H', T')
+
+        # Reshape for RNN: merge freq, keep time
+        B, C, H, T = x.shape
+        x = x.view(B, C * H, T)  # (B, features, time)
+        x = x.permute(0, 2, 1)   # (B, time, features)
+
+        # Pass through RNN
+        x, _ = self.rnn(x)  # -> (B, time, 512)
+
+        # Aggregate time (mean or last step)
+        x = x.mean(dim=1)  # or use x[:, -1, :] for last hidden state
+
+        # Final classification
+        x = self.fc(x)  # -> (B, n_notes)
         return x
 
 """# Data Loader"""

@@ -210,7 +210,7 @@ import torch
 
 class TranscriptionCRNN(nn.Module):
     def __init__(self, n_notes):
-        super(TranscriptionCRNN, self)._init_()
+        super(TranscriptionCRNN, self).__init__()
 
         self.cnn = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1),

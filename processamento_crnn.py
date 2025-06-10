@@ -212,7 +212,7 @@ class TranscriptionCRNN(nn.Module):
     def __init__(self, n_notes):
         super(TranscriptionCRNN, self).__init__()
 
-        self.initial = nn.Sequential(
+        self.cnn = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU()
@@ -237,6 +237,13 @@ class TranscriptionCRNN(nn.Module):
     def forward(self, x):
         # x: (batch_size, 1, height, width)
         x = self.cnn(x)           # -> (batch_size, 256, 1, 1)
+        x = self.layer1(x)       # -> (batch_size, 64, height/2, width/2)
+        x = self.layer2(x)       # -> (batch_size, 128, height/4, width/4)
+        x = self.layer3(x)       # -> (batch_size, 256, height/8, width/8)
+        x = self.layer4(x)       # -> (batch_size, 512, height/16, width/16)
+        x = self.global_pool(x)
+        #x = x.squeeze(-1).squeeze(-1)
+        # x: (batch_size, 512)
         x = self.fc(x)            # -> (batch_size, n_notes)
         return x
 
